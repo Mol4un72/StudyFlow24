@@ -15,7 +15,10 @@ export default function RegisterPage() {
   const { register, isLoading } = useAuth();
   const { connectGitHub } = useGitHub();
 
-  const [name, setName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [studentGroup, setStudentGroup] = useState("");
+  const [birthDate, setBirthDate] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -23,7 +26,10 @@ export default function RegisterPage() {
   const [connectGitHubAfter, setConnectGitHubAfter] = useState(true);
 
   const [errors, setErrors] = useState<{
-    name?: string;
+    firstName?: string;
+    lastName?: string;
+    studentGroup?: string;
+    birthDate?: string;
     email?: string;
     password?: string;
     confirmPassword?: string;
@@ -33,24 +39,39 @@ export default function RegisterPage() {
 
   const validate = () => {
     const errs: typeof errors = {};
-    if (!name.trim()) {
-      errs.name = "Ім'я є обов'язковим полем.";
+
+    if (!firstName.trim()) {
+      errs.firstName = "Введіть ім'я.";
+    }
+
+    if (!lastName.trim()) {
+      errs.lastName = "Введіть прізвище.";
+    }
+
+    if (!studentGroup.trim()) {
+      errs.studentGroup = "Введіть навчальну групу.";
+    }
+
+    if (!birthDate) {
+      errs.birthDate = "Вкажіть дату народження.";
+    } else if (birthDate > new Date().toISOString().slice(0, 10)) {
+      errs.birthDate = "Дата народження не може бути в майбутньому.";
     }
 
     if (!email.trim()) {
-      errs.email = "Електронна пошта є обов'язковим полем.";
+      errs.email = "Електронна пошта є обов'язковою.";
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      errs.email = "Введіть існуючу пошту.";
+      errs.email = "Введіть коректну електронну пошту.";
     }
 
     if (!password) {
-      errs.password = "Пароль є обов'язковим полем.";
+      errs.password = "Введіть пароль.";
     } else if (password.length < 6) {
-      errs.password = "Пароль має мати щонайменше 6 символів.";
+      errs.password = "Пароль має містити щонайменше 6 символів.";
     }
 
     if (password !== confirmPassword) {
-      errs.confirmPassword = "Паролі не зходяться.";
+      errs.confirmPassword = "Паролі не збігаються.";
     }
 
     setErrors(errs);
@@ -63,7 +84,14 @@ export default function RegisterPage() {
 
     setIsSubmitting(true);
     try {
-      const ok = await register(name, email, password);
+      const ok = await register(
+        firstName,
+        lastName,
+        studentGroup,
+        birthDate,
+        email,
+        password
+      );
       if (ok) {
         router.push("/dashboard");
       }
@@ -105,14 +133,62 @@ export default function RegisterPage() {
               label="Ім'я"
               type="text"
               placeholder="Введіть ім'я"
-              value={name}
+              value={firstName}
               onChange={(e) => {
-                setName(e.target.value);
-                if (errors.name) setErrors((prev) => ({ ...prev, name: undefined }));
+                setFirstName(e.target.value);
+                if (errors.firstName) {
+                  setErrors((prev) => ({ ...prev, firstName: undefined }));
+                }
               }}
-              error={errors.name}
+              error={errors.firstName}
               leftIcon={<UserIcon className="w-4 h-4" />}
-              autoComplete="name"
+              autoComplete="given-name"
+              required
+            />
+
+            <Input
+              label="Прізвище"
+              type="text"
+              placeholder="Введіть прізвище"
+              value={lastName}
+              onChange={(e) => {
+                setLastName(e.target.value);
+                if (errors.lastName) {
+                  setErrors((prev) => ({ ...prev, lastName: undefined }));
+                }
+              }}
+              error={errors.lastName}
+              leftIcon={<UserIcon className="w-4 h-4" />}
+              autoComplete="family-name"
+              required
+            />
+
+            <Input
+              label="Навчальна група"
+              type="text"
+              placeholder="Наприклад, КН-21"
+              value={studentGroup}
+              onChange={(e) => {
+                setStudentGroup(e.target.value);
+                if (errors.studentGroup) {
+                  setErrors((prev) => ({ ...prev, studentGroup: undefined }));
+                }
+              }}
+              error={errors.studentGroup}
+              required
+            />
+            
+            <Input
+              label="Дата народження"
+              type="date"
+              value={birthDate}
+              onChange={(e) => {
+                setBirthDate(e.target.value);
+                if (errors.birthDate) {
+                  setErrors((prev) => ({ ...prev, birthDate: undefined }));
+                }
+              }}
+              error={errors.birthDate}
               required
             />
 

@@ -38,8 +38,12 @@ export default function SettingsPage() {
   const { connection, connectGitHub, disconnectGitHub, isConnecting } = useGitHub();
   const { showToast } = useToast();
 
-  const [name, setName] = useState(user?.name || "");
-  const [email, setEmail] = useState(user?.email || "");
+  const [firstName, setFirstName] = useState(user?.firstName || "");
+  const [lastName, setLastName] = useState(user?.lastName || "");
+  const [studentGroup, setStudentGroup] = useState(
+    user?.studentGroup || ""
+  );
+  const [birthDate, setBirthDate] = useState(user?.birthDate || "");
   const [defaultSubject, setDefaultSubject] = useState(
     user?.preferences?.defaultSubject || "Python"
   );
@@ -55,25 +59,47 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    if (user) {
-      setName(user.name);
-      setEmail(user.email);
-      if (user.preferences) {
-        setDefaultSubject(user.preferences.defaultSubject || "Python");
-        setSeparateBranch(user.preferences.separateBranch ?? true);
-        setGenerateReport(user.preferences.generateReport ?? true);
-        setGenerateArchive(user.preferences.generateArchive ?? true);
-      }
+    if (!user) return;
+
+    setFirstName(user.firstName || "");
+    setLastName(user.lastName || "");
+    setStudentGroup(user.studentGroup || "");
+    setBirthDate(user.birthDate || "");
+
+    if (user.preferences) {
+      setDefaultSubject(user.preferences.defaultSubject || "Python");
+      setSeparateBranch(user.preferences.separateBranch ?? true);
+      setGenerateReport(user.preferences.generateReport ?? true);
+      setGenerateArchive(user.preferences.generateArchive ?? true);
     }
   }, [user]);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (
+      !firstName.trim() ||
+      !lastName.trim() ||
+      !studentGroup.trim() ||
+      !birthDate
+    ) {
+      showToast({
+        type: "error",
+        title: "Не всі поля заповнені",
+        message: "Заповніть ім'я, прізвище, групу та дату народження.",
+      });
+
+      return;
+    }
+
     setIsSaving(true);
+
     try {
       await updateProfile({
-        name,
-        email,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        studentGroup: studentGroup.trim(),
+        birthDate,
         preferences: {
           defaultSubject,
           separateBranch,
@@ -112,22 +138,55 @@ export default function SettingsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Input
                 label="Ім'я"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Alex Johnson"
+                type="text"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                placeholder="Введіть ім'я"
+                autoComplete="given-name"
                 required
               />
-
+          
               <Input
-                label="Електронна пошта"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="alex@university.edu"
+                label="Прізвище"
+                type="text"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                placeholder="Введіть прізвище"
+                autoComplete="family-name"
+                required
+              />
+          
+              <Input
+                label="Навчальна група"
+                type="text"
+                value={studentGroup}
+                onChange={(e) => setStudentGroup(e.target.value)}
+                placeholder="Наприклад, КН-21"
+                required
+              />
+          
+              <Input
+                label="Дата народження"
+                type="date"
+                value={birthDate}
+                max={new Date().toISOString().slice(0, 10)}
+                onChange={(e) => setBirthDate(e.target.value)}
                 required
               />
             </div>
-
+            
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">
+                Електронна пошта
+              </label>
+              <p className="text-sm text-gray-200">
+                {user?.email || "—"}
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                Для зміни електронної пошти потрібна окрема процедура.
+              </p>
+            </div>
+            
             <div className="flex pt-2">
               <Button
                 type="submit"
@@ -136,7 +195,7 @@ export default function SettingsPage() {
                 isLoading={isSaving}
                 leftIcon={<Save className="w-3.5 h-3.5" />}
               >
-                Зберегти налаштування
+                Зберегти профіль
               </Button>
             </div>
           </form>

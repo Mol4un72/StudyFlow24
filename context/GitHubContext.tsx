@@ -54,9 +54,16 @@ export function GitHubProvider({
 
       if (!response.ok) {
         const data = await response.json().catch(() => null);
-
+            
+        console.error("GitHub connection API error:", {
+          status: response.status,
+          data,
+        });
+      
         throw new Error(
-          data?.error || "Не вдалося завантажити репозиторії"
+          data?.details ||
+            data?.error ||
+            `Не вдалося перевірити підключення GitHub (${response.status})`
         );
       }
 
@@ -66,6 +73,10 @@ export function GitHubProvider({
       setRepositories(data.repositories);
     } catch (error) {
       console.error("Failed to fetch GitHub repositories:", error);
+      console.error("GitHub connection error details:", {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
 
       showToast({
         type: "error",

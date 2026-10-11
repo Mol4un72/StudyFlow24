@@ -23,7 +23,10 @@ interface AuthContextType {
     rememberMe?: boolean
   ) => Promise<boolean>;
   register: (
-    name: string,
+    firstName: string,
+    lastName: string,
+    studentGroup: string,
+    birthDate: string,
     email: string,
     password: string
   ) => Promise<boolean>;
@@ -61,6 +64,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           id: sessionUser.id,
           name: sessionUser.name,
           email: sessionUser.email,
+
+          firstName: sessionUser.firstName || "",
+          lastName: sessionUser.lastName || "",
+          studentGroup: sessionUser.studentGroup || "",
+          birthDate: sessionUser.birthDate || "",
+
           avatarUrl: sessionUser.image ?? undefined,
           createdAt: previousUser?.createdAt ?? new Date().toISOString(),
           isGitHubConnected: previousUser?.isGitHubConnected ?? false,
@@ -106,6 +115,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             id: sessionUser.id,
             name: sessionUser.name,
             email: sessionUser.email,
+
+            firstName: sessionUser.firstName || "",
+            lastName: sessionUser.lastName || "",
+            studentGroup: sessionUser.studentGroup || "",
+            birthDate: sessionUser.birthDate || "",
+
             avatarUrl: sessionUser.image ?? undefined,
             createdAt: previousUser?.createdAt ?? new Date().toISOString(),
             isGitHubConnected: previousUser?.isGitHubConnected ?? false,
@@ -180,6 +195,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isGitHubConnected: previousUser?.isGitHubConnected ?? false,
         githubUsername: previousUser?.githubUsername,
         preferences: previousUser?.preferences,
+        firstName: sessionUser.firstName || "",
+        lastName: sessionUser.lastName || "",
+        studentGroup: sessionUser.studentGroup || "",
+        birthDate: sessionUser.birthDate || "",
       }));
 
       showToast({
@@ -205,17 +224,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const register = async (
-    name: string,
+    firstName: string,
+    lastName: string,
+    studentGroup: string,
+    birthDate: string,
     email: string,
     password: string
   ): Promise<boolean> => {
     setIsLoading(true);
 
     try {
+      const fullName = `${firstName.trim()} ${lastName.trim()}`;
+
       const result = await authClient.signUp.email({
-        name: name.trim(),
+        name: fullName,
         email: email.trim(),
         password,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        studentGroup: studentGroup.trim(),
+        birthDate,
       });
 
       if (result.error) {
@@ -237,6 +265,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           id: sessionUser.id,
           name: sessionUser.name,
           email: sessionUser.email,
+          firstName: sessionUser.firstName,
+          lastName: sessionUser.lastName,
+          studentGroup: sessionUser.studentGroup,
+          birthDate: sessionUser.birthDate,
           avatarUrl: sessionUser.image ?? undefined,
           createdAt: new Date().toISOString(),
           isGitHubConnected: false,
@@ -254,7 +286,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       showToast({
         type: "success",
         title: "Account Created",
-        message: `Welcome to StudyFlow, ${name.trim()}!`,
+        message: `Вітаємо, ${firstName.trim()}!`,
       });
 
       return true;
@@ -304,28 +336,67 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const updateProfile = async (
     updates: Partial<User>
   ): Promise<boolean> => {
-    // Better Auth does not automatically persist custom preferences.
-    // Keep this update in component state until a profile API is implemented.
     if (!user) return false;
-
-    const updatedUser: User = {
-      ...user,
-      ...updates,
-      preferences: {
-        ...user.preferences,
-        ...updates.preferences,
-      },
-    };
-
-    setUser(updatedUser);
-
-    showToast({
-      type: "success",
-      title: "Profile Updated",
-      message: "Changes updated for this session.",
-    });
-
-    return true;
+  
+    try {
+      const profile = {
+        firstName: updates.firstName ?? user.firstName,
+        lastName: updates.lastName ?? user.lastName,
+        studentGroup: updates.studentGroup ?? user.studentGroup,
+        birthDate: updates.birthDate ?? user.birthDate,
+      };
+    
+      const response = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(profile),
+      });
+    
+      const data = await response.json();
+    
+      if (!response.ok) {
+        showToast({
+          type: "error",
+          title: "Помилка збереження",
+          message: data.error ?? "Не вдалося зберегти профіль.",
+        });
+      
+        return false;
+      }
+    
+      setUser((currentUser) => {
+        if (!currentUser) return currentUser;
+      
+        return {
+          ...currentUser,
+          ...data.user,
+          preferences: {
+            ...currentUser.preferences,
+            ...updates.preferences,
+          },
+        };
+      });
+    
+      showToast({
+        type: "success",
+        title: "Профіль збережено",
+        message: "Зміни успішно збережено.",
+      });
+    
+      return true;
+    } catch (error) {
+      console.error("Failed to update profile:", error);
+    
+      showToast({
+        type: "error",
+        title: "Помилка збереження",
+        message: "Не вдалося зв'язатися із сервером.",
+      });
+    
+      return false;
+    }
   };
 
   return (

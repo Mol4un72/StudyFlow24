@@ -73,22 +73,32 @@ export async function POST(request: Request) {
       );
     }
 
-    if (
-      !outputOptions ||
-      typeof outputOptions.separateBranch !== "boolean" ||
-      typeof outputOptions.generateReport !== "boolean" ||
-      typeof outputOptions.generateArchive !== "boolean"
-    ) {
-      return NextResponse.json(
-        { error: "Invalid output options" },
-        { status: 400 },
-      );
-    }
+    const isProgramming = subject.trim() === "Програмування";
+    const isDatabases = subject.trim() === "Бази даних";
+
+    const generateReport =
+      isProgramming && outputOptions?.generateReport === true;
+
+    const generateArchive =
+      isProgramming && outputOptions?.generateArchive === true;
+
+    const effectiveOutputOptions = {
+      separateBranch: !isDatabases,
+      generateReport,
+      generateArchive,
+    };
 
     const effectiveSubject =
       subject === "Other" && typeof customSubject === "string"
         ? customSubject.trim()
         : subject.trim();
+
+    if (!effectiveSubject) {
+      return NextResponse.json(
+        { error: "Subject cannot be empty" },
+        { status: 400 },
+      );
+    }
 
     const firstLine = instructions.trim().split("\n")[0].slice(0, 45);
 
@@ -114,6 +124,61 @@ export async function POST(request: Request) {
       connection.installationId,
     );
 
+    let effectiveBranchName =
+      typeof branchName === "string" && branchName.trim()
+        ? branchName.trim()
+        : `practice-${slug || "assignment"}-${Date.now().toString(36)}`;
+
+    const branchMode: "named" | "current" = isDatabases
+      ? "current"
+      : "named";
+
+    if (isDatabases) {
+      const repoParts = repositoryName.trim().split("/");
+
+      if (
+        repoParts.length !== 2 ||
+        !repoParts[0] ||
+        !repoParts[1]
+      ) {
+        return NextResponse.json(
+          { error: "Invalid GitHub repository name" },
+          { status: 400 },
+        );
+      }
+
+      const [owner, repo] = repoParts;
+
+      const repoResponse = await fetch(
+        `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${installationToken}`,
+            Accept: "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+          },
+          cache: "no-store",
+        },
+      );
+
+      if (!repoResponse.ok) {
+        throw new Error(
+          `Не вдалося отримати інформацію про репозиторій GitHub: ${repoResponse.status}`,
+        );
+      }
+
+      const repoData = await repoResponse.json();
+
+      if (
+        typeof repoData.default_branch !== "string" ||
+        !repoData.default_branch.trim()
+      ) {
+        throw new Error("GitHub не повернув основну гілку репозиторію.");
+      }
+
+      effectiveBranchName = repoData.default_branch;
+    }
+
     const task = await prisma.task.create({
       data: {
         userId: session.user.id,
@@ -131,15 +196,12 @@ export async function POST(request: Request) {
             : null,
         status: "queued",
         currentStageIndex: 1,
-        branchName:
-          typeof branchName === "string" && branchName.trim()
-            ? branchName.trim()
-            : `practice-${slug || "assignment"}-${Date.now().toString(36)}`,
+        branchName: effectiveBranchName,
         commitMessage:
           typeof commitMessage === "string" && commitMessage.trim()
             ? commitMessage.trim()
             : `Виконання практичної роботи: ${firstLine || effectiveSubject}`,
-        outputOptions,
+        outputOptions: effectiveOutputOptions,
         stages: createInitialTaskStages(),
         files: [],
         validationChecks: [],
@@ -167,9 +229,12 @@ export async function POST(request: Request) {
             .join("\n\n"),
           repositoryUrl: `https://github.com/${task.repositoryFullName}`,
           branch: task.branchName!,
+          branchMode,
           tasksFolder: `task-${task.id}`,
           commitMessage: task.commitMessage!,
           installationToken,
+          generateReport,
+          generateArchive,
 
           onStage: async (stageId) => {
             const stageIndex = TASK_STAGE_DEFINITIONS.findIndex(
@@ -203,16 +268,16 @@ export async function POST(request: Request) {
                   cache: "no-store",
                 },
               );
-            
+
               if (!response.ok) {
                 throw new Error(
                   `GitHub API error: ${response.status} ${response.statusText}`,
                 );
               }
-            
+
               const branchData = await response.json();
               const commitSha = branchData.commit?.sha;
-            
+
               if (typeof commitSha === "string") {
                 await prisma.task.update({
                   where: { id: task.id },

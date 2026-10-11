@@ -11,6 +11,7 @@ import { RepositorySelector } from "@/components/features/RepositorySelector";
 import { useGitHub } from "@/context/GitHubContext";
 import { useToast } from "@/context/ToastContext";
 import { Repository } from "@/types/github";
+import { useAuth } from "@/context/AuthContext";
 import {
   ArrowRight,
   BookOpen,
@@ -29,6 +30,7 @@ export default function NewAssignmentPage() {
   const router = useRouter();
   const { repositories } = useGitHub();
   const { showToast } = useToast();
+  const { user } = useAuth();
 
   const [subject, setSubject] = useState("");
   const [customSubject, setCustomSubject] = useState("");
@@ -37,6 +39,9 @@ export default function NewAssignmentPage() {
   const [commitMessage, setCommitMessage] = useState("");
   const [instructions, setInstructions] = useState("");
   const [additionalContext, setAdditionalContext] = useState("");
+
+  const [generateReport, setGenerateReport] = useState(false);
+  const [generateArchive, setGenerateArchive] = useState(false);
 
   const [errors, setErrors] = useState<{
     subject?: string;
@@ -47,6 +52,10 @@ export default function NewAssignmentPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const selectedRepo = repositories.find((r) => r.id === selectedRepoId);
+
+  const isProgramming = subject === "Програмування";
+  const isWebDevelopment = subject === "Веб-розробка";
+  const isDatabases = subject === "Бази даних";
 
   const validate = () => {
     const errs: typeof errors = {};
@@ -99,9 +108,11 @@ export default function NewAssignmentPage() {
           instructions,
           additionalContext: additionalContext.trim() || undefined,
           outputOptions: {
-            separateBranch: true,
-            generateReport: true,
-            generateArchive: true,
+            separateBranch: subject !== "Бази даних",
+            generateReport:
+              subject === "Програмування" && generateReport,
+            generateArchive:
+              subject === "Програмування" && generateArchive,
           },
         }),
       });
@@ -178,28 +189,26 @@ export default function NewAssignmentPage() {
                 options={SUBJECT_OPTIONS}
                 value={subject}
                 onChange={(e) => {
-                  setSubject(e.target.value);
-                  if (errors.subject) setErrors((prev) => ({ ...prev, subject: undefined }));
+                  const nextSubject = e.target.value;
+
+                  setSubject(nextSubject);
+
+                  if (nextSubject !== "Програмування") {
+                    setGenerateReport(false);
+                    setGenerateArchive(false);
+                  }
+                
+                  if (errors.subject) {
+                    setErrors((prev) => ({
+                      ...prev,
+                      subject: undefined,
+                    }));
+                  }
                 }}
                 error={errors.subject}
                 leftIcon={<BookOpen className="w-4 h-4" />}
                 required
               />
-
-              {subject === "Інше" && (
-                <Input
-                  label="Власна назва дисципліни"
-                  placeholder="напр. Алгоритми та структури даних"
-                  value={customSubject}
-                  onChange={(e) => {
-                    setCustomSubject(e.target.value);
-                    if (errors.customSubject)
-                      setErrors((prev) => ({ ...prev, customSubject: undefined }));
-                  }}
-                  error={errors.customSubject}
-                  required
-                />
-              )}
             </div>
           </section>
 
@@ -226,11 +235,20 @@ export default function NewAssignmentPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-[#1E2330]">
               <Input
                 label="Назва гілки"
-                placeholder="напр. practice-04-solution"
+                placeholder={
+                  isDatabases
+                    ? "Використовується поточна гілка репозиторію"
+                    : "напр. practice-04-solution"
+                }
                 value={branchName}
                 onChange={(e) => setBranchName(e.target.value)}
                 leftIcon={<GitBranch className="w-4 h-4 text-purple-400" />}
-                hint="Гілка буде створена агентом автоматично"
+                hint={
+                  isDatabases
+                    ? "Для баз даних агент працює в поточній гілці"
+                    : "Гілка буде створена агентом автоматично"
+                }
+                disabled={isDatabases}
               />
 
               <Input
@@ -280,6 +298,44 @@ export default function NewAssignmentPage() {
                 onChange={(e) => setAdditionalContext(e.target.value)}
               />
             </div>
+
+            {isProgramming && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4">
+                <label className="flex items-start gap-3 rounded-xl border border-[#222736] bg-[#0E1118] p-4 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={generateReport}
+                    onChange={(e) => setGenerateReport(e.target.checked)}
+                    className="mt-1 accent-violet-500"
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-gray-200">
+                      Створити звіт
+                    </span>
+                    <span className="block text-xs text-gray-400 mt-1">
+                      Агент сформує звіт про виконання завдання.
+                    </span>
+                  </span>
+                </label>
+                        
+                <label className="flex items-start gap-3 rounded-xl border border-[#222736] bg-[#0E1118] p-4 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={generateArchive}
+                    onChange={(e) => setGenerateArchive(e.target.checked)}
+                    className="mt-1 accent-violet-500"
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-gray-200">
+                      Створити папку з файлами
+                    </span>
+                    <span className="block text-xs text-gray-400 mt-1">
+                      Результати виконання будуть зібрані в окремій папці.
+                    </span>
+                  </span>
+                </label>
+              </div>
+            )}
           </section>
 
           {/* SECTION 4 — SUBMISSION SUMMARY & START */}
@@ -311,7 +367,9 @@ export default function NewAssignmentPage() {
               <div className="p-3 rounded-xl bg-[#0E1118] border border-[#222736]">
                 <span className="text-gray-500 block mb-1">Цільова гілка</span>
                 <span className="font-semibold text-purple-300 font-mono truncate block">
-                  {branchName || "practice-solution"}
+                  {isDatabases
+                    ? "Поточна гілка репозиторію"
+                    : branchName || "Буде визначена агентом"}
                 </span>
               </div>
             </div>

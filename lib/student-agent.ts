@@ -1,4 +1,3 @@
-import "server-only";
 import { spawn } from "node:child_process";
 import path from "node:path";
 
@@ -6,9 +5,12 @@ interface RunAgentOptions {
   assignment: string;
   repositoryUrl: string;
   branch: string;
+  branchMode: "named" | "current";
   tasksFolder: string;
   commitMessage: string;
   installationToken: string;
+  generateReport: boolean;
+  generateArchive: boolean;
   onStage?: (stageId: string) => Promise<void>;
 }
 
@@ -34,8 +36,6 @@ export async function runStudentAgent(
     options.repositoryUrl,
     "--branch",
     options.branch,
-    "--tasks-folder",
-    options.tasksFolder,
     "--commit-message",
     options.commitMessage,
   ];
@@ -47,6 +47,25 @@ export async function runStudentAgent(
         ...process.env,
         GITHUB_TOKEN: options.installationToken,
         PYTHONUNBUFFERED: "1",
+            
+        STUDYFLOW_PUSH_TARGET: options.branch,
+        STUDYFLOW_BRANCH_MODE: options.branchMode,
+        STUDYFLOW_REQUIRE_CLEAN_TREE: "true",
+            
+        STUDYFLOW_GENERATE_REPORT: String(options.generateReport),
+        STUDYFLOW_GENERATE_ARCHIVE: String(options.generateArchive),
+            
+        STUDYFLOW_OUTPUT_DIRECTORY_MODE: options.generateArchive
+          ? "exclusive"
+          : "disabled",
+            
+        STUDYFLOW_OUTPUT_DIRECTORY: options.generateArchive
+        ? `branch-${Buffer.from(options.branch, "utf8")
+            .toString("base64")
+            .replace(/\+/g, "-")
+            .replace(/\//g, "_")
+            .replace(/=+$/, "")}`
+        : "",
       },
       stdio: ["ignore", "pipe", "pipe"],
     });

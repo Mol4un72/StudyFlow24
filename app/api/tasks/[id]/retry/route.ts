@@ -117,6 +117,12 @@ export async function POST(
       },
     });
 
+    const outputOptions =
+    originalTask.outputOptions as {
+      generateReport?: boolean;
+      generateArchive?: boolean;
+    } | null;
+
     // Запускаємо агента асинхронно, не затримуючи HTTP-відповідь.
     void (async () => {
       try {
@@ -134,6 +140,9 @@ export async function POST(
             `https://github.com/${retryTask.repositoryFullName}`,
 
           branch: retryTask.branchName!,
+          branchMode: "named",
+          generateReport: outputOptions?.generateReport === true,
+          generateArchive: outputOptions?.generateArchive === true,
           tasksFolder: `task-${retryTask.id}`,
           commitMessage: retryTask.commitMessage!,
           installationToken,
