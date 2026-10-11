@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { runStudentAgent } from "@/lib/student-agent";
 import { getGitHubInstallationToken } from "@/lib/github-app";
+import { checkPaidAccess } from "@/lib/access";
 import {
   TASK_STAGE_DEFINITIONS,
   createInitialTaskStages,
@@ -43,6 +44,21 @@ export async function POST(request: Request) {
 
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const access = await checkPaidAccess(
+      session.user.id,
+      session.user.email,
+    );
+
+    if (!access.allowed) {
+      return NextResponse.json(
+        {
+          error: access.error,
+          code: access.code,
+        },
+        { status: 403 },
+      );
     }
 
     const body = await request.json();

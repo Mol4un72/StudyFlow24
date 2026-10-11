@@ -65,6 +65,9 @@ model User {
   studentGroup      String    @default("")
   birthDate         String    @default("")
 
+  accessUntil       DateTime?
+  isBlocked         Boolean   @default(false)
+
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
