@@ -24,7 +24,7 @@ export default function LoginPage() {
     if (!email.trim()) {
       errs.email = "Електронна пошта є обов'язковим полем.";
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      errs.email = "Введіть існуючу електронну пошту.";
+      errs.email = "Введіть коректну електронну пошту.";
     }
 
     if (!password) {
@@ -136,7 +136,7 @@ export default function LoginPage() {
               variant="primary"
               className="w-full mt-2"
               size="md"
-              isLoading={isSubmitting || isLoading}
+              isLoading={isSubmitting}
               rightIcon={<ArrowRight className="w-4 h-4" />}
             >
               Увійти

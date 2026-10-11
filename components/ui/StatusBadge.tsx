@@ -7,7 +7,6 @@ import {
   Loader2,
   CheckCircle2,
   AlertTriangle,
-  GitPullRequest,
   FileEdit,
   Send,
 } from "lucide-react";
@@ -41,14 +40,16 @@ export function StatusBadge({
       border: "border-gray-700/60",
       icon: FileEdit,
     },
+
     queued: {
-      label: "В черзі",
+      label: "У черзі",
       bg: "bg-blue-950/40",
       text: "text-blue-300",
       border: "border-blue-800/40",
       icon: Clock,
     },
-    processing: {
+
+    running: {
       label: "Виконується",
       bg: "bg-indigo-950/50",
       text: "text-indigo-300",
@@ -56,6 +57,16 @@ export function StatusBadge({
       icon: Loader2,
       animate: true,
     },
+
+    processing: {
+      label: "Обробляється",
+      bg: "bg-indigo-950/50",
+      text: "text-indigo-300",
+      border: "border-indigo-800/50",
+      icon: Loader2,
+      animate: true,
+    },
+
     review: {
       label: "Очікує перегляду",
       bg: "bg-amber-950/40",
@@ -63,6 +74,7 @@ export function StatusBadge({
       border: "border-amber-800/50",
       icon: AlertTriangle,
     },
+
     publishing: {
       label: "Публікується",
       bg: "bg-purple-950/50",
@@ -71,15 +83,17 @@ export function StatusBadge({
       icon: Send,
       animate: true,
     },
+
     completed: {
       label: "Виконано",
       bg: "bg-emerald-950/40",
       text: "text-emerald-300",
-      border: "border-emerald-800/50",
+      border: "border-emerald-800/40",
       icon: CheckCircle2,
     },
+
     failed: {
-      label: "Провалено",
+      label: "Помилка",
       bg: "bg-rose-950/40",
       text: "text-rose-300",
       border: "border-rose-800/50",
@@ -100,8 +114,13 @@ export function StatusBadge({
       className={`inline-flex items-center rounded-full border ${item.bg} ${item.text} ${item.border} ${sizeClasses} select-none`}
     >
       {showIcon && (
-        <Icon className={`w-3.5 h-3.5 shrink-0 ${item.animate ? "animate-spin" : ""}`} />
+        <Icon
+          className={`w-3.5 h-3.5 shrink-0 ${
+            item.animate ? "animate-spin" : ""
+          }`}
+        />
       )}
+
       <span>{item.label}</span>
     </span>
   );

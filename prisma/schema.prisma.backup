@@ -1,0 +1,23 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Task {
+  id                String   @id @default(cuid())
+  userId            String
+  subject           String
+  repositoryFullName String
+  assignmentText    String   @db.Text
+  status            String   @default("pending")
+  branchName        String?
+  commitSha         String?
+  zipPath           String?
+  reportPath        String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}

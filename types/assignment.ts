@@ -1,6 +1,7 @@
 export type AssignmentStatus =
   | "draft"
   | "queued"
+  | "running"
   | "processing"
   | "review"
   | "publishing"
@@ -31,7 +32,7 @@ export interface AssignmentStageInfo {
   key: string;
   title: string;
   description: string;
-  status: "pending" | "running" | "completed" | "failed";
+  status: "pending" | "running" | "completed" | "failed" | "skipped";
   timestamp?: string;
   message?: string;
 }

@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { mockTaskService } from "@/services/mockTaskService";
 import { Assignment } from "@/types/assignment";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/Button";
@@ -26,26 +25,63 @@ export default function DashboardPage() {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const loadAssignments = () => {
+  const loadAssignments = async () => {
     setIsLoading(true);
+    
     try {
-      const data = mockTaskService.getAssignments();
-      setAssignments(data);
+      const response = await fetch("/api/tasks");
+    
+      if (!response.ok) {
+        throw new Error("Не вдалося завантажити завдання");
+      }
+    
+      const data = await response.json();
+    
+      const mappedAssignments: Assignment[] = data.map((task: any) => ({
+        id: task.id,
+        title: task.title,
+        subject: task.subject,
+        customSubject: task.customSubject ?? undefined,
+        repositoryId: task.repositoryId,
+        repositoryName: task.repositoryFullName,
+        instructions: task.assignmentText,
+        additionalContext: task.additionalContext ?? undefined,
+        status: task.status,
+        currentStageIndex: task.currentStageIndex,
+        stages: Array.isArray(task.stages) ? task.stages : [],
+        branchName: task.branchName ?? undefined,
+        commitMessage: task.commitMessage ?? undefined,
+        commitSha: task.commitSha ?? undefined,
+        simulatedRepoUrl: task.simulatedRepoUrl ?? undefined,
+        createdAt: task.createdAt,
+        updatedAt: task.updatedAt,
+        publishedAt: task.publishedAt ?? undefined,
+        files: Array.isArray(task.files) ? task.files : [],
+        validationChecks: Array.isArray(task.validationChecks)
+          ? task.validationChecks
+          : [],
+        outputOptions: task.outputOptions ?? {
+          separateBranch: true,
+          generateReport: true,
+          generateArchive: true,
+        },
+        reportStatus: task.reportStatus,
+        archiveStatus: task.archiveStatus,
+        errorDetails: task.errorDetails ?? undefined,
+      }));
+    
+      setAssignments(mappedAssignments);
+    } catch (error) {
+      console.error("Failed to load assignments:", error);
+      setAssignments([]);
     } finally {
       setIsLoading(false);
     }
   };
-
+  
   useEffect(() => {
     loadAssignments();
   }, []);
-
-  const handleResetData = () => {
-    if (confirm("Reset assignments to original demo state?")) {
-      const reset = mockTaskService.resetToDefault();
-      setAssignments(reset);
-    }
-  };
 
   const completedCount = assignments.filter((a) => a.status === "completed").length;
   const inProgressCount = assignments.filter(

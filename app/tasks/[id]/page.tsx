@@ -4,10 +4,8 @@ import React, { useState, useEffect, useCallback, use } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { mockTaskService } from "@/services/mockTaskService";
 import { mockArtifactService } from "@/services/mockArtifactService";
 import { Assignment } from "@/types/assignment";
-import { FileList } from "@/components/features/FileList";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/Button";
 import { LoadingState } from "@/components/ui/LoadingState";
@@ -24,8 +22,6 @@ import {
   Loader2,
   Plus,
   ArrowLeft,
-  Calendar,
-  Sparkles,
   FileCode,
 } from "lucide-react";
 
@@ -44,48 +40,109 @@ export default function TaskViewPage({
   const [downloadingZip, setDownloadingZip] = useState(false);
   const [downloadingReport, setDownloadingReport] = useState(false);
 
-  // Load assignment data
-  const loadAssignment = useCallback(() => {
-    try {
-      const data = mockTaskService.getAssignmentById(taskId);
-      setAssignment(data);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [taskId]);
+  const loadAssignment = useCallback(
+    async (showLoader = false) => {
+      if (showLoader) {
+        setIsLoading(true);
+      }
+
+      try {
+        const response = await fetch(`/api/tasks/${taskId}`, {
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          if (response.status === 404) {
+            setAssignment(null);
+            return;
+          }
+
+          throw new Error("Не вдалося завантажити завдання");
+        }
+
+        const task = await response.json();
+
+        const data: Assignment = {
+          id: task.id,
+          title: task.title,
+          subject: task.subject,
+          customSubject: task.customSubject ?? undefined,
+          repositoryId: task.repositoryId,
+          repositoryName: task.repositoryFullName,
+          instructions: task.assignmentText,
+          additionalContext: task.additionalContext ?? undefined,
+          status: task.status,
+          currentStageIndex: task.currentStageIndex,
+          stages: Array.isArray(task.stages) ? task.stages : [],
+          branchName: task.branchName ?? undefined,
+          commitMessage: task.commitMessage ?? undefined,
+          commitSha: task.commitSha ?? undefined,
+          simulatedRepoUrl: task.simulatedRepoUrl ?? undefined,
+          createdAt: task.createdAt,
+          updatedAt: task.updatedAt,
+          publishedAt: task.publishedAt ?? undefined,
+          files: Array.isArray(task.files) ? task.files : [],
+          validationChecks: Array.isArray(task.validationChecks)
+            ? task.validationChecks
+            : [],
+          outputOptions: task.outputOptions ?? {
+            separateBranch: true,
+            generateReport: true,
+            generateArchive: true,
+          },
+          reportStatus: task.reportStatus,
+          archiveStatus: task.archiveStatus,
+          errorDetails: task.errorDetails ?? undefined,
+        };
+
+        setAssignment(data);
+      } catch (error) {
+        console.error("Failed to load assignment:", error);
+        setAssignment(null);
+
+        showToast({
+          type: "error",
+          title: "Помилка завантаження",
+          message: "Не вдалося завантажити завдання з сервера.",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [taskId, showToast],
+  );
 
   useEffect(() => {
-    loadAssignment();
+    void loadAssignment(true);
   }, [loadAssignment]);
 
-  // Automated stage progression: the AI agent performs execution, validation, and branch push automatically
   useEffect(() => {
-    if (!assignment) return;
-
-    if (assignment.status !== "completed" && assignment.status !== "failed") {
-      const timer = setTimeout(async () => {
-        const updated = await mockTaskService.advanceStage(assignment.id);
-        if (updated) {
-          setAssignment(updated);
-          if (updated.status === "completed") {
-            showToast({
-              type: "success",
-              title: "Завдання успішно виконано!",
-              message: "Агент запушив код у гілку. Папка та звіт готові.",
-            });
-          }
-        }
-      }, 1200);
-
-      return () => clearTimeout(timer);
+    if (
+      !assignment ||
+      assignment.status === "completed" ||
+      assignment.status === "failed"
+    ) {
+      return;
     }
-  }, [assignment, showToast]);
+
+    const intervalId = window.setInterval(() => {
+      void loadAssignment();
+    }, 3000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [assignment?.status, assignment, loadAssignment]);
 
   const handleDownloadZip = async () => {
     if (!assignment) return;
+
     setDownloadingZip(true);
+
     try {
-      const ok = await mockArtifactService.generateAndDownloadZip(assignment);
+      const ok =
+        await mockArtifactService.generateAndDownloadZip(assignment);
+
       if (ok) {
         showToast({
           type: "success",
@@ -100,9 +157,13 @@ export default function TaskViewPage({
 
   const handleDownloadReport = async () => {
     if (!assignment) return;
+
     setDownloadingReport(true);
+
     try {
-      const ok = await mockArtifactService.generateAndDownloadReport(assignment);
+      const ok =
+        await mockArtifactService.generateAndDownloadReport(assignment);
+
       if (ok) {
         showToast({
           type: "success",
@@ -136,8 +197,14 @@ export default function TaskViewPage({
     );
   }
 
-  const isExecuting = assignment.status !== "completed" && assignment.status !== "failed";
-  const currentStage = assignment.stages[assignment.currentStageIndex - 1];
+  const isExecuting =
+    assignment.status === "queued" || assignment.status === "running";
+
+  const stages = Array.isArray(assignment.stages)
+  ? assignment.stages
+  : [];
+
+  const currentStage = stages[assignment.currentStageIndex - 1];
 
   return (
     <AppLayout
@@ -149,7 +216,11 @@ export default function TaskViewPage({
       action={
         <div className="flex items-center gap-2">
           <Link href="/tasks/new">
-            <Button variant="primary" size="sm" leftIcon={<Plus className="w-4 h-4" />}>
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<Plus className="w-4 h-4" />}
+            >
               Нове завдання
             </Button>
           </Link>
@@ -157,7 +228,6 @@ export default function TaskViewPage({
       }
     >
       <div className="max-w-4xl mx-auto space-y-6 text-left">
-        {/* Top Header Card */}
         <div className="p-6 rounded-2xl bg-[#12151D] border border-[#222736] space-y-4 shadow-xl">
           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
             <div className="space-y-1.5 flex-1 min-w-0">
@@ -165,10 +235,12 @@ export default function TaskViewPage({
                 <span className="text-xs font-mono px-2.5 py-0.5 rounded-full bg-[#8B5CF6]/15 text-[#A78BFA] border border-[#8B5CF6]/30 font-medium">
                   {assignment.subject}
                 </span>
+
                 <span className="text-xs text-gray-500 font-mono">
                   ID: {assignment.id}
                 </span>
               </div>
+
               <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
                 {assignment.title}
               </h1>
@@ -177,85 +249,222 @@ export default function TaskViewPage({
             <StatusBadge status={assignment.status} />
           </div>
 
-          {/* Metadata Row: Repo, Branch, Commit */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-[#1E222D] text-xs text-gray-400">
+            {/* Repository */}
             <div className="flex items-center gap-2">
               <FolderGit2 className="w-4 h-4 text-gray-500 shrink-0" />
+
               <div className="min-w-0">
-                <span className="text-[10px] text-gray-500 block uppercase">Репозиторій</span>
-                <span className="font-mono text-gray-200 truncate block">
-                  {assignment.repositoryName}
+                <span className="text-[10px] text-gray-500 block uppercase">
+                  Репозиторій
                 </span>
+
+                <a
+                  href={`https://github.com/${assignment.repositoryName}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono text-gray-200 truncate block hover:text-purple-400 transition-colors"
+                >
+                  {assignment.repositoryName}
+                </a>
               </div>
             </div>
 
+            {/* Branch */}
             <div className="flex items-center gap-2">
               <GitBranch className="w-4 h-4 text-purple-400 shrink-0" />
+
               <div className="min-w-0">
-                <span className="text-[10px] text-gray-500 block uppercase">Гілка (Branch)</span>
-                <span className="font-mono text-purple-300 truncate block">
-                  {assignment.branchName || "practice-solution"}
+                <span className="text-[10px] text-gray-500 block uppercase">
+                  Гілка (Branch)
                 </span>
+
+                {assignment.branchName ? (
+                  <a
+                    href={`https://github.com/${assignment.repositoryName}/tree/${encodeURIComponent(assignment.branchName)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-mono text-purple-300 truncate block hover:text-purple-200 transition-colors"
+                  >
+                    {assignment.branchName}
+                  </a>
+                ) : (
+                  <span className="text-gray-500">Не вказано</span>
+                )}
               </div>
             </div>
-
+              
+            {/* Commit */}
             <div className="flex items-center gap-2">
               <GitCommit className="w-4 h-4 text-emerald-400 shrink-0" />
+              
               <div className="min-w-0">
-                <span className="text-[10px] text-gray-500 block uppercase">Коміт</span>
-                <span className="text-gray-200 truncate block">
-                  {assignment.commitMessage || "Виконання практичної"}
+                <span className="text-[10px] text-gray-500 block uppercase">
+                  Коміт
                 </span>
+              
+                {assignment.commitSha ? (
+                  <a
+                    href={`https://github.com/${assignment.repositoryName}/commit/${encodeURIComponent(assignment.commitSha)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-gray-200 truncate block hover:text-emerald-400 transition-colors"
+                    title={assignment.commitMessage}
+                  >
+                    {assignment.commitMessage || assignment.commitSha.slice(0, 7)}
+                  </a>
+                ) : (
+                  <span
+                    className="text-gray-500 truncate block"
+                    title={assignment.commitMessage}
+                  >
+                    {assignment.commitMessage || "Коміт ще не створено"}
+                  </span>
+                )}
               </div>
             </div>
           </div>
         </div>
 
-        {/* IN-PROGRESS STATE: Agent is executing and pushing */}
         {isExecuting && (
-          <div className="p-8 rounded-2xl bg-[#12151D] border border-[#8B5CF6]/40 text-center space-y-4 shadow-xl">
-            <div className="w-12 h-12 rounded-2xl bg-[#191D28] border border-[#8B5CF6]/50 flex items-center justify-center mx-auto text-[#8B5CF6]">
-              <Loader2 className="w-6 h-6 animate-spin" />
+          <div className="p-6 sm:p-8 rounded-2xl bg-[#12151D] border border-[#8B5CF6]/40 space-y-6 shadow-xl">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-[#191D28] border border-[#8B5CF6]/50 flex items-center justify-center text-[#8B5CF6] shrink-0">
+                <Loader2 className="w-6 h-6 animate-spin" />
+              </div>
+
+              <div className="min-w-0">
+                <h3 className="text-base font-semibold text-white">
+                  ШІ-агент виконує завдання
+                </h3>
+
+                <p className="text-sm text-gray-400 mt-1">
+                  {currentStage?.message ||
+                    "Очікуємо на початок виконання..."}
+                </p>
+
+                <p className="text-xs text-gray-500 mt-2">
+                  Етап {assignment.currentStageIndex} із {stages.length}
+                </p>
+              </div>
             </div>
 
-            <div className="space-y-1 max-w-md mx-auto">
-              <h3 className="text-base font-semibold text-white">
-                ШІ агент виконує завдання та пушить у гілку
-              </h3>
-              <p className="text-xs text-gray-400 leading-relaxed">
-                {currentStage?.message || "Обробка вимог, генерація коду, запуск перевірок та пуш у GitHub..."}
-              </p>
-            </div>
+            <div className="space-y-3">
+              {stages.map((stage, index) => {
+                const completed = stage.status === "completed";
+                const running = stage.status === "running";
+                const failed = stage.status === "failed";
+                const skipped = stage.status === "skipped";
 
-            <div className="flex items-center justify-center gap-2 text-xs text-gray-500 font-mono pt-2">
-              <span>Етап {assignment.currentStageIndex} з 7</span>
-              <span>•</span>
-              <span className="text-purple-400">{currentStage?.title}</span>
+                let statusLabel = "Очікує";
+                let statusClass = "text-gray-500";
+
+                if (completed) {
+                  statusLabel = "Завершено";
+                  statusClass = "text-emerald-400";
+                } else if (running) {
+                  statusLabel = "Виконується";
+                  statusClass = "text-purple-400";
+                } else if (failed) {
+                  statusLabel = "Помилка";
+                  statusClass = "text-red-400";
+                } else if (skipped) {
+                  statusLabel = "Пропущено";
+                  statusClass = "text-gray-500";
+                }
+
+                return (
+                  <div
+                    key={stage.id ?? `${stage.title}-${index}`}
+                    className={`flex items-start gap-3 rounded-xl border p-3 ${
+                      running
+                        ? "border-purple-500/30 bg-purple-500/5"
+                        : failed
+                          ? "border-red-500/30 bg-red-500/5"
+                          : "border-[#222736] bg-[#0E1118]"
+                    }`}
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-[#191D28] flex items-center justify-center shrink-0">
+                      {completed ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      ) : running ? (
+                        <Loader2 className="w-4 h-4 text-purple-400 animate-spin" />
+                      ) : failed ? (
+                        <span className="text-red-400 text-sm font-bold">
+                          !
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-500">
+                          {index + 1}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-gray-200 font-medium">
+                        {stage.title}
+                      </p>
+
+                      {running && (
+                        <p className="text-xs text-gray-400 mt-1">
+                          {stage.message}
+                        </p>
+                      )}
+                    </div>
+
+                    <span className={`text-xs shrink-0 ${statusClass}`}>
+                      {statusLabel}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
 
-        {/* COMPLETED STATE: Deliverables (Folder with solution + Separate report file) */}
-        {!isExecuting && (
+        {assignment.status === "failed" && (
+          <div className="p-6 rounded-2xl bg-[#12151D] border border-red-500/30 space-y-3">
+            <h3 className="text-base font-semibold text-red-400">
+              Не вдалося виконати завдання
+            </h3>
+
+            <p className="text-sm text-gray-300 whitespace-pre-wrap break-words">
+              {assignment.errorDetails ||
+                "Сталася невідома помилка під час виконання."}
+            </p>
+
+            <Link href="/history">
+              <Button variant="secondary" size="sm">
+                До списку завдань
+              </Button>
+            </Link>
+          </div>
+        )}
+
+        {assignment.status === "completed" && (
           <div className="space-y-6 animate-in fade-in duration-200">
-            {/* Main Deliverables Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* 1. Folder with completed assignment files */}
               <div className="p-6 rounded-2xl bg-[#12151D] border border-[#222736] hover:border-[#2E3547] transition-all flex flex-col justify-between gap-5 shadow-lg">
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="w-10 h-10 rounded-xl bg-[#191D28] border border-[#2E3547] text-[#8B5CF6] flex items-center justify-center">
                       <Archive className="w-5 h-5" />
                     </div>
+
                     <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-950/60 text-emerald-400 border border-emerald-800/40">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Готово
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Готово
                     </span>
                   </div>
 
                   <div>
-                    <h3 className="text-base font-bold text-white">Папка з виконаними завданнями</h3>
+                    <h3 className="text-base font-bold text-white">
+                      Папка з виконаними завданнями
+                    </h3>
+
                     <p className="text-xs text-gray-400 mt-1 leading-relaxed">
-                      ZIP-архів з усіма файлами розв'язку, структурою каталогів та README.
+                      ZIP-архів з усіма файлами розв'язку, структурою каталогів
+                      та README.
                     </p>
                   </div>
                 </div>
@@ -274,22 +483,27 @@ export default function TaskViewPage({
                 </div>
               </div>
 
-              {/* 2. Separate Report File */}
               <div className="p-6 rounded-2xl bg-[#12151D] border border-[#222736] hover:border-[#2E3547] transition-all flex flex-col justify-between gap-5 shadow-lg">
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="w-10 h-10 rounded-xl bg-[#191D28] border border-[#2E3547] text-indigo-400 flex items-center justify-center">
                       <FileText className="w-5 h-5" />
                     </div>
+
                     <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-950/60 text-emerald-400 border border-emerald-800/40">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Сформовано
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Сформовано
                     </span>
                   </div>
 
                   <div>
-                    <h3 className="text-base font-bold text-white">Окремий файл зі звітом</h3>
+                    <h3 className="text-base font-bold text-white">
+                      Окремий файл зі звітом
+                    </h3>
+
                     <p className="text-xs text-gray-400 mt-1 leading-relaxed">
-                      Готовий лабораторний звіт (DOCX). Завантажте, додайте власні скриншоти та надішліть викладачу.
+                      Готовий лабораторний звіт (DOCX). Завантажте, додайте
+                      власні скриншоти та надішліть викладачу.
                     </p>
                   </div>
                 </div>
@@ -309,46 +523,56 @@ export default function TaskViewPage({
               </div>
             </div>
 
-            {/* Generated Files & Code Explorer */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-semibold text-gray-300 uppercase tracking-wider flex items-center gap-2">
                   <FileCode className="w-4 h-4 text-[#8B5CF6]" />
-                  <span>Виконані файли розв'язку ({assignment.files.length})</span>
+                  <span>
+                    Виконані файли розв'язку ({assignment.files.length})
+                  </span>
                 </h3>
+
                 <span className="text-xs text-gray-500 font-mono">
                   Гілка: {assignment.branchName}
                 </span>
               </div>
 
-              <FileList files={assignment.files} />
             </div>
 
-            {/* Task Prompt Overview */}
             <div className="p-5 rounded-2xl bg-[#12151D] border border-[#222736] space-y-3 text-xs">
               <h4 className="font-semibold text-gray-300 uppercase tracking-wider">
                 Умова завдання
               </h4>
+
               <div className="p-3.5 rounded-xl bg-[#090B0F] border border-[#1E222D] text-gray-300 font-sans leading-relaxed whitespace-pre-line">
                 {assignment.instructions}
               </div>
+
               {assignment.additionalContext && (
                 <p className="text-gray-400">
-                  <strong>Додаткові вимоги:</strong> {assignment.additionalContext}
+                  <strong>Додаткові вимоги:</strong>{" "}
+                  {assignment.additionalContext}
                 </p>
               )}
             </div>
 
-            {/* Bottom Actions */}
             <div className="pt-2 flex flex-wrap items-center justify-between gap-3 border-t border-[#222736]">
               <Link href="/history">
-                <Button variant="ghost" size="sm" leftIcon={<ArrowLeft className="w-4 h-4" />}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  leftIcon={<ArrowLeft className="w-4 h-4" />}
+                >
                   До списку завдань
                 </Button>
               </Link>
 
               <Link href="/tasks/new">
-                <Button variant="primary" size="sm" leftIcon={<Plus className="w-4 h-4" />}>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  leftIcon={<Plus className="w-4 h-4" />}
+                >
                   Створити нове завдання
                 </Button>
               </Link>

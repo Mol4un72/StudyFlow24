@@ -1,8 +1,15 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
-import { User } from "@/types/auth";
-import { mockAuthService } from "@/services/mockAuthService";
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  type ReactNode,
+} from "react";
+import { authClient } from "@/lib/auth-client";
+import type { User } from "@/types/auth";
 import { useToast } from "./ToastContext";
 import { useRouter } from "next/navigation";
 
@@ -10,8 +17,16 @@ interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (email: string, password: string, rememberMe?: boolean) => Promise<boolean>;
-  register: (name: string, email: string, password: string) => Promise<boolean>;
+  login: (
+    email: string,
+    password: string,
+    rememberMe?: boolean
+  ) => Promise<boolean>;
+  register: (
+    name: string,
+    email: string,
+    password: string
+  ) => Promise<boolean>;
   logout: () => Promise<void>;
   updateProfile: (updates: Partial<User>) => Promise<boolean>;
   refreshUser: () => void;
@@ -22,65 +37,236 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
   const { showToast } = useToast();
   const router = useRouter();
 
   const refreshUser = useCallback(() => {
-    try {
-      const u = mockAuthService.getCurrentUser();
-      setUser(u);
-    } catch (e) {
-      console.error(e);
-      setUser(null);
-    } finally {
-      setIsLoading(false);
-    }
+    let cancelled = false;
+
+    const loadSession = async () => {
+      try {
+        const result = await authClient.getSession();
+
+        if (cancelled) return;
+
+        if (result.error || !result.data?.user) {
+          setUser(null);
+          return;
+        }
+
+        const sessionUser = result.data.user;
+
+        setUser((previousUser) => ({
+          id: sessionUser.id,
+          name: sessionUser.name,
+          email: sessionUser.email,
+          avatarUrl: sessionUser.image ?? undefined,
+          createdAt: previousUser?.createdAt ?? new Date().toISOString(),
+          isGitHubConnected: previousUser?.isGitHubConnected ?? false,
+          githubUsername: previousUser?.githubUsername,
+          preferences: previousUser?.preferences,
+        }));
+      } catch (error) {
+        console.error("Failed to load auth session:", error);
+
+        if (!cancelled) {
+          setUser(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    setIsLoading(true);
+    void loadSession();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
-    refreshUser();
-  }, [refreshUser]);
+    let cancelled = false;
 
-  const login = async (email: string, pass: string, rememberMe = false): Promise<boolean> => {
+    const loadSession = async () => {
+      try {
+        const result = await authClient.getSession();
+
+        if (cancelled) return;
+
+        if (result.error || !result.data?.user) {
+          setUser(null);
+        } else {
+          const sessionUser = result.data.user;
+
+          setUser((previousUser) => ({
+            id: sessionUser.id,
+            name: sessionUser.name,
+            email: sessionUser.email,
+            avatarUrl: sessionUser.image ?? undefined,
+            createdAt: previousUser?.createdAt ?? new Date().toISOString(),
+            isGitHubConnected: previousUser?.isGitHubConnected ?? false,
+            githubUsername: previousUser?.githubUsername,
+            preferences: previousUser?.preferences,
+          }));
+        }
+      } catch (error) {
+        console.error("Failed to load auth session:", error);
+
+        if (!cancelled) {
+          setUser(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void loadSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const login = async (
+    email: string,
+    password: string,
+    rememberMe = true
+  ): Promise<boolean> => {
+    setIsLoading(true);
+
     try {
-      setIsLoading(true);
-      const u = await mockAuthService.login(email, pass, rememberMe);
-      setUser(u);
+      const result = await authClient.signIn.email({
+        email: email.trim(),
+        password,
+        rememberMe,
+      });
+
+      if (result.error) {
+        showToast({
+          type: "error",
+          title: "Sign in failed",
+          message: result.error.message ?? "Please check your credentials.",
+        });
+
+        return false;
+      }
+
+      const session = await authClient.getSession();
+
+      if (session.error || !session.data?.user) {
+        showToast({
+          type: "error",
+          title: "Sign in failed",
+          message: "Could not retrieve the authenticated session.",
+        });
+
+        return false;
+      }
+
+      const sessionUser = session.data.user;
+
+      setUser((previousUser) => ({
+        id: sessionUser.id,
+        name: sessionUser.name,
+        email: sessionUser.email,
+        avatarUrl: sessionUser.image ?? undefined,
+        createdAt: previousUser?.createdAt ?? new Date().toISOString(),
+        isGitHubConnected: previousUser?.isGitHubConnected ?? false,
+        githubUsername: previousUser?.githubUsername,
+        preferences: previousUser?.preferences,
+      }));
+
       showToast({
         type: "success",
         title: "Welcome back!",
-        message: `Signed in as ${u.name}`,
+        message: `Signed in as ${sessionUser.name}`,
       });
+
       return true;
-    } catch (e) {
+    } catch (error) {
+      console.error("Login failed:", error);
+
       showToast({
         type: "error",
         title: "Sign in failed",
-        message: "Please check your credentials and try again.",
+        message: "An unexpected error occurred.",
       });
+
       return false;
     } finally {
       setIsLoading(false);
     }
   };
 
-  const register = async (name: string, email: string, pass: string): Promise<boolean> => {
+  const register = async (
+    name: string,
+    email: string,
+    password: string
+  ): Promise<boolean> => {
+    setIsLoading(true);
+
     try {
-      setIsLoading(true);
-      const u = await mockAuthService.register(name, email, pass);
-      setUser(u);
+      const result = await authClient.signUp.email({
+        name: name.trim(),
+        email: email.trim(),
+        password,
+      });
+
+      if (result.error) {
+        showToast({
+          type: "error",
+          title: "Registration failed",
+          message: result.error.message ?? "Could not create your account.",
+        });
+
+        return false;
+      }
+
+      const session = await authClient.getSession();
+
+      if (session.data?.user) {
+        const sessionUser = session.data.user;
+
+        setUser({
+          id: sessionUser.id,
+          name: sessionUser.name,
+          email: sessionUser.email,
+          avatarUrl: sessionUser.image ?? undefined,
+          createdAt: new Date().toISOString(),
+          isGitHubConnected: false,
+          preferences: {
+            defaultSubject: "Web Development",
+            generateReport: true,
+            generateArchive: true,
+            separateBranch: true,
+          },
+        });
+      } else {
+        setUser(null);
+      }
+
       showToast({
         type: "success",
         title: "Account Created",
-        message: `Welcome to StudyFlow, ${u.name}!`,
+        message: `Welcome to StudyFlow, ${name.trim()}!`,
       });
+
       return true;
-    } catch (e) {
+    } catch (error) {
+      console.error("Registration failed:", error);
+
       showToast({
         type: "error",
         title: "Registration failed",
         message: "Could not complete account creation.",
       });
+
       return false;
     } finally {
       setIsLoading(false);
@@ -89,40 +275,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async (): Promise<void> => {
     try {
-      await mockAuthService.logout();
+      const result = await authClient.signOut();
+
+      if (result.error) {
+        throw new Error(result.error.message);
+      }
+
       setUser(null);
+
       showToast({
         type: "info",
         title: "Signed Out",
-        message: "You have been logged out of the session.",
+        message: "You have been logged out.",
       });
+
       router.push("/login");
-    } catch (e) {
-      console.error("Logout error", e);
+    } catch (error) {
+      console.error("Logout error:", error);
+
+      showToast({
+        type: "error",
+        title: "Sign out failed",
+        message: "Could not sign out. Please try again.",
+      });
     }
   };
 
-  const updateProfile = async (updates: Partial<User>): Promise<boolean> => {
-    try {
-      const updated = await mockAuthService.updateProfile(updates);
-      if (updated) {
-        setUser(updated);
-        showToast({
-          type: "success",
-          title: "Profile Updated",
-          message: "Your preferences have been saved.",
-        });
-        return true;
-      }
-      return false;
-    } catch (e) {
-      showToast({
-        type: "error",
-        title: "Update Failed",
-        message: "Failed to update profile settings.",
-      });
-      return false;
-    }
+  const updateProfile = async (
+    updates: Partial<User>
+  ): Promise<boolean> => {
+    // Better Auth does not automatically persist custom preferences.
+    // Keep this update in component state until a profile API is implemented.
+    if (!user) return false;
+
+    const updatedUser: User = {
+      ...user,
+      ...updates,
+      preferences: {
+        ...user.preferences,
+        ...updates.preferences,
+      },
+    };
+
+    setUser(updatedUser);
+
+    showToast({
+      type: "success",
+      title: "Profile Updated",
+      message: "Changes updated for this session.",
+    });
+
+    return true;
   };
 
   return (
@@ -145,8 +348,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
+
   if (!context) {
     throw new Error("useAuth must be used within an AuthProvider");
   }
+
   return context;
 }

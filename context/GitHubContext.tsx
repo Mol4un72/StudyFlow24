@@ -1,8 +1,15 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  ReactNode,
+} from "react";
+
 import { GitHubConnection, Repository } from "@/types/github";
-import { mockGitHubService } from "@/services/mockGitHubService";
 import { useToast } from "./ToastContext";
 
 interface GitHubContextType {
@@ -15,106 +22,153 @@ interface GitHubContextType {
   refreshRepositories: () => Promise<void>;
 }
 
-const GitHubContext = createContext<GitHubContextType | undefined>(undefined);
+const GitHubContext = createContext<GitHubContextType | undefined>(
+  undefined
+);
 
-export function GitHubProvider({ children }: { children: ReactNode }) {
-  const [connection, setConnection] = useState<GitHubConnection>({
-    isConnected: false,
-    username: null,
-    avatarUrl: null,
-    scopes: [],
-    connectedAt: null,
-  });
+const initialConnection: GitHubConnection = {
+  isConnected: false,
+  username: null,
+  avatarUrl: null,
+  scopes: [],
+  connectedAt: null,
+};
+
+export function GitHubProvider({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  const [connection, setConnection] =
+    useState<GitHubConnection>(initialConnection);
+
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isConnecting, setIsConnecting] = useState(false);
+
   const { showToast } = useToast();
 
-  const loadData = useCallback(async () => {
-    setIsLoading(true);
+  const refreshRepositories = useCallback(async () => {
     try {
-      const conn = mockGitHubService.getConnection();
-      setConnection(conn);
-      if (conn.isConnected) {
-        const repos = await mockGitHubService.getRepositories();
-        setRepositories(repos);
+      const response = await fetch("/api/github/repositories");
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+
+        throw new Error(
+          data?.error || "Не вдалося завантажити репозиторії"
+        );
+      }
+
+      const data: { repositories: Repository[] } =
+        await response.json();
+
+      setRepositories(data.repositories);
+    } catch (error) {
+      console.error("Failed to fetch GitHub repositories:", error);
+
+      showToast({
+        type: "error",
+        title: "Помилка GitHub",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Не вдалося завантажити репозиторії",
+      });
+    }
+  }, [showToast]);
+
+  const loadConnection = useCallback(async () => {
+    setIsLoading(true);
+
+    try {
+      const response = await fetch("/api/github/connection");
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+
+        throw new Error(
+          data?.error || "Не вдалося перевірити підключення GitHub"
+        );
+      }
+
+      const data: GitHubConnection = await response.json();
+
+      setConnection(data);
+
+      if (data.isConnected) {
+        await refreshRepositories();
       } else {
         setRepositories([]);
       }
-    } catch (e) {
-      console.error("Failed loading GitHub data", e);
+    } catch (error) {
+      console.error("Failed to load GitHub connection:", error);
+
+      setConnection(initialConnection);
+      setRepositories([]);
+
+      showToast({
+        type: "error",
+        title: "Помилка GitHub",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Не вдалося перевірити підключення GitHub",
+      });
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [refreshRepositories, showToast]);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    loadConnection();
+  }, [loadConnection]);
 
-  const connectGitHub = async (username: string = "student-alex"): Promise<boolean> => {
+  const connectGitHub = async (): Promise<boolean> => {
     setIsConnecting(true);
-    try {
-      const conn = await mockGitHubService.connect(username);
-      setConnection(conn);
-      const repos = await mockGitHubService.getRepositories();
-      setRepositories(repos);
-      showToast({
-        type: "success",
-        title: "GitHub Connected",
-        message: `Simulated connection established with @${conn.username}`,
-      });
-      return true;
-    } catch (e) {
-      showToast({
-        type: "error",
-        title: "Connection Failed",
-        message: "Failed to simulate GitHub connection.",
-      });
-      return false;
-    } finally {
-      setIsConnecting(false);
-    }
+
+    window.location.assign("/api/github/connect");
+
+    return true;
   };
 
   const disconnectGitHub = async (): Promise<boolean> => {
-    setIsConnecting(true);
     try {
-      const conn = await mockGitHubService.disconnect();
-      setConnection(conn);
-      setRepositories([]);
-      showToast({
-        type: "info",
-        title: "GitHub Disconnected",
-        message: "Your mock GitHub connection has been disconnected.",
+      const response = await fetch("/api/github/disconnect", {
+        method: "DELETE",
       });
+    
+      const data = await response.json();
+    
+      if (!response.ok) {
+        throw new Error(
+          data.error || "Не вдалося відключити GitHub"
+        );
+      }
+    
+      setConnection(initialConnection);
+      setRepositories([]);
+    
+      showToast({
+        type: "success",
+        title: "GitHub відключено",
+        message: "Твій GitHub-акаунт від'єднано від StudyFlow.",
+      });
+    
       return true;
-    } catch (e) {
+    } catch (error) {
+      console.error("Failed to disconnect GitHub:", error);
+    
       showToast({
         type: "error",
-        title: "Error",
-        message: "Failed to disconnect GitHub.",
+        title: "Помилка GitHub",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Не вдалося відключити GitHub",
       });
+    
       return false;
-    } finally {
-      setIsConnecting(false);
-    }
-  };
-
-  const refreshRepositories = async (): Promise<void> => {
-    setIsLoading(true);
-    try {
-      const repos = await mockGitHubService.getRepositories();
-      setRepositories(repos);
-      showToast({
-        type: "info",
-        title: "Repositories Refreshed",
-        message: `Found ${repos.length} accessible repositories.`,
-      });
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -137,8 +191,12 @@ export function GitHubProvider({ children }: { children: ReactNode }) {
 
 export function useGitHub() {
   const context = useContext(GitHubContext);
+
   if (!context) {
-    throw new Error("useGitHub must be used within a GitHubProvider");
+    throw new Error(
+      "useGitHub must be used within a GitHubProvider"
+    );
   }
+
   return context;
 }

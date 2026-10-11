@@ -3,6 +3,7 @@ export interface Repository {
   name: string;
   fullName: string;
   description: string;
+  url: string;
   isPrivate: boolean;
   defaultBranch: string;
   language: string;

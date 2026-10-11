@@ -1,0 +1,335 @@
+import { NextResponse } from "next/server";
+import { headers } from "next/headers";
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { runStudentAgent } from "@/lib/student-agent";
+import { getGitHubInstallationToken } from "@/lib/github-app";
+import {
+  TASK_STAGE_DEFINITIONS,
+  createInitialTaskStages,
+} from "@/lib/task-stages";
+
+export async function GET() {
+  try {
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    });
+
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const tasks = await prisma.task.findMany({
+      where: { userId: session.user.id },
+      orderBy: { updatedAt: "desc" },
+    });
+
+    return NextResponse.json(tasks);
+  } catch (error) {
+    console.error("Failed to fetch tasks:", error);
+
+    return NextResponse.json(
+      { error: "Failed to fetch tasks" },
+      { status: 500 },
+    );
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    });
+
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await request.json();
+
+    const {
+      subject,
+      customSubject,
+      repositoryId,
+      repositoryName,
+      instructions,
+      additionalContext,
+      branchName,
+      commitMessage,
+      outputOptions,
+    } = body;
+
+    if (
+      typeof subject !== "string" ||
+      typeof repositoryName !== "string" ||
+      typeof instructions !== "string" ||
+      !subject.trim() ||
+      !repositoryName.trim() ||
+      !instructions.trim()
+    ) {
+      return NextResponse.json(
+        { error: "Subject, repository and instructions are required" },
+        { status: 400 },
+      );
+    }
+
+    if (
+      !outputOptions ||
+      typeof outputOptions.separateBranch !== "boolean" ||
+      typeof outputOptions.generateReport !== "boolean" ||
+      typeof outputOptions.generateArchive !== "boolean"
+    ) {
+      return NextResponse.json(
+        { error: "Invalid output options" },
+        { status: 400 },
+      );
+    }
+
+    const effectiveSubject =
+      subject === "Other" && typeof customSubject === "string"
+        ? customSubject.trim()
+        : subject.trim();
+
+    const firstLine = instructions.trim().split("\n")[0].slice(0, 45);
+
+    const slug = effectiveSubject
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+
+    const connection = await prisma.gitHubConnection.findUnique({
+      where: { userId: session.user.id },
+      select: { installationId: true },
+    });
+
+    if (!connection) {
+      return NextResponse.json(
+        { error: "GitHub is not connected" },
+        { status: 400 },
+      );
+    }
+
+    const installationToken = await getGitHubInstallationToken(
+      connection.installationId,
+    );
+
+    const task = await prisma.task.create({
+      data: {
+        userId: session.user.id,
+        title: `${effectiveSubject} — ${firstLine || "Практичне завдання"}`,
+        subject: effectiveSubject,
+        customSubject:
+          typeof customSubject === "string" ? customSubject.trim() : null,
+        repositoryId:
+          typeof repositoryId === "string" ? repositoryId : "",
+        repositoryFullName: repositoryName.trim(),
+        assignmentText: instructions.trim(),
+        additionalContext:
+          typeof additionalContext === "string"
+            ? additionalContext.trim()
+            : null,
+        status: "queued",
+        currentStageIndex: 1,
+        branchName:
+          typeof branchName === "string" && branchName.trim()
+            ? branchName.trim()
+            : `practice-${slug || "assignment"}-${Date.now().toString(36)}`,
+        commitMessage:
+          typeof commitMessage === "string" && commitMessage.trim()
+            ? commitMessage.trim()
+            : `Виконання практичної роботи: ${firstLine || effectiveSubject}`,
+        outputOptions,
+        stages: createInitialTaskStages(),
+        files: [],
+        validationChecks: [],
+      },
+    });
+
+    await prisma.task.update({
+      where: { id: task.id },
+      data: {
+        status: "running",
+        errorDetails: null,
+      },
+    });
+
+    void (async () => {
+      try {
+        await runStudentAgent({
+          assignment: [
+            `ОСНОВНЕ ЗАВДАННЯ:\n${task.assignmentText}`,
+            task.additionalContext?.trim()
+              ? `ДОДАТКОВІ ВИМОГИ:\n${task.additionalContext.trim()}`
+              : "",
+          ]
+            .filter(Boolean)
+            .join("\n\n"),
+          repositoryUrl: `https://github.com/${task.repositoryFullName}`,
+          branch: task.branchName!,
+          tasksFolder: `task-${task.id}`,
+          commitMessage: task.commitMessage!,
+          installationToken,
+
+          onStage: async (stageId) => {
+            const stageIndex = TASK_STAGE_DEFINITIONS.findIndex(
+              (stage) => stage.id === stageId,
+            );
+
+            if (stageIndex === -1) {
+              console.warn(`Unknown task stage: ${stageId}`);
+              return;
+            }
+
+            const stages = TASK_STAGE_DEFINITIONS.map((stage, index) => ({
+              ...stage,
+              status:
+                index < stageIndex
+                  ? "completed"
+                  : index === stageIndex
+                    ? "running"
+                    : "pending",
+            }));
+
+            try {
+              const response = await fetch(
+                `https://api.github.com/repos/${task.repositoryFullName}/branches/${encodeURIComponent(task.branchName!)}`,
+                {
+                  headers: {
+                    Authorization: `Bearer ${installationToken}`,
+                    Accept: "application/vnd.github+json",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                  },
+                  cache: "no-store",
+                },
+              );
+            
+              if (!response.ok) {
+                throw new Error(
+                  `GitHub API error: ${response.status} ${response.statusText}`,
+                );
+              }
+            
+              const branchData = await response.json();
+              const commitSha = branchData.commit?.sha;
+            
+              if (typeof commitSha === "string") {
+                await prisma.task.update({
+                  where: { id: task.id },
+                  data: { commitSha },
+                });
+              }
+            } catch (error) {
+              console.error(
+                `Could not save commit SHA for task ${task.id}:`,
+                error,
+              );
+            }
+
+            await prisma.task.update({
+              where: { id: task.id },
+              data: {
+                status: "running",
+                currentStageIndex: stageIndex + 1,
+                stages,
+              },
+            });
+
+            console.log(
+              `Task ${task.id}: stage ${stageIndex + 1}/${TASK_STAGE_DEFINITIONS.length} — ${TASK_STAGE_DEFINITIONS[stageIndex].title}`,
+            );
+          },
+        });
+
+        const latestTask = await prisma.task.findUnique({
+          where: { id: task.id },
+          select: {
+            stages: true,
+            currentStageIndex: true,
+          },
+        });
+
+        const currentIndex = latestTask?.currentStageIndex ?? 1;
+
+        const currentStages = Array.isArray(latestTask?.stages)
+          ? (latestTask.stages as Array<Record<string, unknown>>)
+          : [];
+
+        const completedStages = currentStages.map((stage, index) => ({
+          ...stage,
+          status: index < currentIndex ? "completed" : "skipped",
+        }));
+
+        await prisma.task.update({
+          where: { id: task.id },
+          data: {
+            status: "completed",
+            stages: completedStages,
+            errorDetails: null,
+          },
+        });
+
+        console.log(`Task ${task.id} completed successfully.`);
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+
+        console.error(`Task ${task.id} failed:`, errorMessage);
+
+        try {
+          const latestTask = await prisma.task.findUnique({
+            where: { id: task.id },
+            select: {
+              stages: true,
+              currentStageIndex: true,
+            },
+          });
+
+          const currentIndex = latestTask?.currentStageIndex ?? 1;
+
+          const currentStages = Array.isArray(latestTask?.stages)
+            ? (latestTask.stages as Array<Record<string, unknown>>)
+            : [];
+
+          const failedStages = currentStages.map((stage, index) => ({
+            ...stage,
+            status:
+              index < currentIndex - 1
+                ? "completed"
+                : index === currentIndex - 1
+                  ? "failed"
+                  : "pending",
+          }));
+
+          await prisma.task.update({
+            where: { id: task.id },
+            data: {
+              status: "failed",
+              stages: failedStages,
+              errorDetails: errorMessage,
+            },
+          });
+        } catch (updateError) {
+          console.error(
+            `Could not update status for task ${task.id}:`,
+            updateError,
+          );
+        }
+      }
+    })();
+
+    return NextResponse.json(
+      { ...task, status: "running" },
+      { status: 201 },
+    );
+  } catch (error) {
+    console.error("Failed to create task:", error);
+
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 },
+    );
+  }
+}

@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:17
+    container_name: studyflow-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: studyflow
+      POSTGRES_USER: studyflow_user
+      POSTGRES_PASSWORD: Freeze_100X
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - studyflow_data:/var/lib/postgresql/data
+
+volumes:
+  studyflow_data:

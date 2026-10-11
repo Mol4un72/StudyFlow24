@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { mockTaskService } from "@/services/mockTaskService";
 import { Assignment, AssignmentStatus } from "@/types/assignment";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/Button";
@@ -31,25 +30,107 @@ export default function HistoryPage() {
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
   const { showToast } = useToast();
 
-  const loadAssignments = () => {
-    const data = mockTaskService.getAssignments();
-    setAssignments(data);
+  const loadAssignments = async () => {
+    try {
+      const response = await fetch("/api/tasks");
+    
+      if (!response.ok) {
+        throw new Error("Не вдалося завантажити завдання");
+      }
+    
+      const data = await response.json();
+    
+      const mappedAssignments: Assignment[] = data.map((task: any) => ({
+        id: task.id,
+        title: task.title,
+        subject: task.subject,
+        customSubject: task.customSubject ?? undefined,
+        repositoryId: task.repositoryId,
+        repositoryName: task.repositoryFullName,
+        instructions: task.assignmentText,
+        additionalContext: task.additionalContext ?? undefined,
+        status: task.status,
+        currentStageIndex: task.currentStageIndex,
+        stages: Array.isArray(task.stages) ? task.stages : [],
+        branchName: task.branchName ?? undefined,
+        commitMessage: task.commitMessage ?? undefined,
+        commitSha: task.commitSha ?? undefined,
+        simulatedRepoUrl: task.simulatedRepoUrl ?? undefined,
+        createdAt: task.createdAt,
+        updatedAt: task.updatedAt,
+        publishedAt: task.publishedAt ?? undefined,
+        files: Array.isArray(task.files) ? task.files : [],
+        validationChecks: Array.isArray(task.validationChecks)
+          ? task.validationChecks
+          : [],
+        outputOptions: task.outputOptions ?? {
+          separateBranch: true,
+          generateReport: true,
+          generateArchive: true,
+        },
+        reportStatus: task.reportStatus,
+        archiveStatus: task.archiveStatus,
+        errorDetails: task.errorDetails ?? undefined,
+      }));
+    
+      setAssignments(mappedAssignments);
+    } catch (error) {
+      console.error("Failed to load assignments:", error);
+    
+      showToast({
+        type: "error",
+        title: "Помилка завантаження",
+        message: "Не вдалося завантажити історію завдань.",
+      });
+    }
   };
-
+  
   useEffect(() => {
     loadAssignments();
   }, []);
-
-  const handleDelete = (id: string, title: string, e: React.MouseEvent) => {
+    
+  const handleDelete = async (
+    id: string,
+    title: string,
+    e: React.MouseEvent
+  ) => {
     e.preventDefault();
     e.stopPropagation();
-    if (confirm(`Видалити завдання "${title}"?`)) {
-      mockTaskService.deleteAssignment(id);
-      loadAssignments();
+  
+    if (!confirm(`Видалити завдання "${title}"?`)) {
+      return;
+    }
+  
+    try {
+      const response = await fetch(`/api/tasks/${id}`, {
+        method: "DELETE",
+      });
+    
+      const data = await response.json();
+    
+      if (!response.ok) {
+        throw new Error(data.error || "Не вдалося видалити завдання");
+      }
+    
+      setAssignments((current) =>
+        current.filter((assignment) => assignment.id !== id)
+      );
+    
       showToast({
-        type: "info",
+        type: "success",
         title: "Завдання видалено",
-        message: `Видалено ${title} з робочого простору.`,
+        message: `Завдання "${title}" видалено.`,
+      });
+    } catch (error) {
+      console.error("Failed to delete assignment:", error);
+    
+      showToast({
+        type: "error",
+        title: "Помилка видалення",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Не вдалося видалити завдання.",
       });
     }
   };

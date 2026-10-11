@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { Button } from "@/components/ui/Button";
 import { RepositorySelector } from "@/components/features/RepositorySelector";
-import { mockTaskService } from "@/services/mockTaskService";
 import { useGitHub } from "@/context/GitHubContext";
 import { useToast } from "@/context/ToastContext";
 import { Repository } from "@/types/github";
@@ -31,11 +30,11 @@ export default function NewAssignmentPage() {
   const { repositories } = useGitHub();
   const { showToast } = useToast();
 
-  const [subject, setSubject] = useState("Програмування");
+  const [subject, setSubject] = useState("");
   const [customSubject, setCustomSubject] = useState("");
-  const [selectedRepoId, setSelectedRepoId] = useState<string>("repo-2");
-  const [branchName, setBranchName] = useState("practice-04-solution");
-  const [commitMessage, setCommitMessage] = useState("Виконання практичної роботи");
+  const [selectedRepoId, setSelectedRepoId] = useState<string>("");
+  const [branchName, setBranchName] = useState("");
+  const [commitMessage, setCommitMessage] = useState("");
   const [instructions, setInstructions] = useState("");
   const [additionalContext, setAdditionalContext] = useState("");
 
@@ -85,39 +84,58 @@ export default function NewAssignmentPage() {
 
     setIsSubmitting(true);
     try {
-      const newAssignment = await mockTaskService.createAssignment({
-        subject,
-        customSubject: subject === "Інше" ? customSubject : undefined,
-        repositoryId: selectedRepo.id,
-        repositoryName: selectedRepo.fullName,
-        branchName: branchName.trim() || undefined,
-        commitMessage: commitMessage.trim() || undefined,
-        instructions,
-        additionalContext: additionalContext.trim() || undefined,
-        outputOptions: {
-          separateBranch: true,
-          generateReport: true,
-          generateArchive: true,
+      const response = await fetch("/api/tasks", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
+        body: JSON.stringify({
+          subject,
+          customSubject: subject === "Інше" ? customSubject : undefined,
+          repositoryId: selectedRepo.id,
+          repositoryName: selectedRepo.fullName,
+          branchName: branchName.trim() || undefined,
+          commitMessage: commitMessage.trim() || undefined,
+          instructions,
+          additionalContext: additionalContext.trim() || undefined,
+          outputOptions: {
+            separateBranch: true,
+            generateReport: true,
+            generateArchive: true,
+          },
+        }),
       });
-
+    
+      const newAssignment = await response.json();
+    
+      if (!response.ok) {
+        throw new Error(
+          newAssignment.error || "Не вдалося створити завдання"
+        );
+      }
+    
       showToast({
         type: "success",
-        title: "Завдання передано агенту",
-        message: "ШІ агент розпочав виконання та підготовку розв'язку.",
+        title: "Завдання створено",
+        message: "Завдання збережено в базі даних.",
       });
-
+    
       router.push(`/tasks/${newAssignment.id}`);
     } catch (e) {
+      console.error("Failed to create assignment:", e);
+    
       showToast({
         type: "error",
         title: "Помилка надсилання",
-        message: "Неможливо створити завдання.",
+        message:
+          e instanceof Error
+            ? e.message
+            : "Неможливо створити завдання.",
       });
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }
 
   return (
     <AppLayout
