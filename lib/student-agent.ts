@@ -11,6 +11,13 @@ interface RunAgentOptions {
   installationToken: string;
   generateReport: boolean;
   generateArchive: boolean;
+
+  studentProfile: {
+    firstName: string;
+    lastName: string;
+    studentGroup: string;
+  };
+
   onStage?: (stageId: string) => Promise<void>;
 }
 
@@ -53,6 +60,10 @@ export async function runStudentAgent(
         STUDYFLOW_PUSH_TARGET: options.branch,
         STUDYFLOW_BRANCH_MODE: options.branchMode,
         STUDYFLOW_REQUIRE_CLEAN_TREE: "true",
+
+        STUDYFLOW_STUDENT_FIRST_NAME: options.studentProfile.firstName,
+        STUDYFLOW_STUDENT_LAST_NAME: options.studentProfile.lastName,
+        STUDYFLOW_STUDENT_GROUP: options.studentProfile.studentGroup,
             
         STUDYFLOW_GENERATE_REPORT: String(options.generateReport),
         STUDYFLOW_GENERATE_ARCHIVE: String(options.generateArchive),

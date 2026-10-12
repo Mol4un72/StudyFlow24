@@ -44,6 +44,19 @@ export async function POST(
     
     const { id } = await params;
 
+    const studentProfile = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: {
+        firstName: true,
+        lastName: true,
+        studentGroup: true,
+      },
+    });
+
+    if (!studentProfile) {
+      throw new Error("Не вдалося отримати профіль студента.");
+    }
+
     // Знаходимо початкове завдання поточного користувача.
     const originalTask = await prisma.task.findFirst({
       where: {
@@ -167,6 +180,11 @@ export async function POST(
           tasksFolder: `task-${retryTask.id}`,
           commitMessage: retryTask.commitMessage!,
           installationToken,
+          studentProfile: {
+            firstName: studentProfile.firstName,
+            lastName: studentProfile.lastName,
+            studentGroup: studentProfile.studentGroup,
+          },
 
           onStage: async (stageId) => {
             const stageIndex = TASK_STAGE_DEFINITIONS.findIndex(

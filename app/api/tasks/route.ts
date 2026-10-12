@@ -61,6 +61,19 @@ export async function POST(request: Request) {
       );
     }
 
+    const studentProfile = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: {
+        firstName: true,
+        lastName: true,
+        studentGroup: true,
+      },
+    });
+
+    if (!studentProfile) {
+      throw new Error("Не вдалося отримати профіль студента.");
+    }
+
     const body = await request.json();
 
     const {
@@ -247,6 +260,11 @@ export async function POST(request: Request) {
           tasksFolder: `task-${task.id}`,
           commitMessage: task.commitMessage!,
           installationToken,
+          studentProfile: {
+            firstName: studentProfile.firstName,
+            lastName: studentProfile.lastName,
+            studentGroup: studentProfile.studentGroup,
+          },
           generateReport: effectiveOutputOptions.generateReport,
           generateArchive: effectiveOutputOptions.generateArchive,
 
