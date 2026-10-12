@@ -299,43 +299,59 @@ export default function NewAssignmentPage() {
               />
             </div>
 
-            {isProgramming && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4">
-                <label className="flex items-start gap-3 rounded-xl border border-[#222736] bg-[#0E1118] p-4 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={generateReport}
-                    onChange={(e) => setGenerateReport(e.target.checked)}
-                    className="mt-1 accent-violet-500"
-                  />
-                  <span>
-                    <span className="block text-sm font-medium text-gray-200">
-                      Створити звіт
-                    </span>
-                    <span className="block text-xs text-gray-400 mt-1">
-                      Агент сформує звіт про виконання завдання.
-                    </span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4">
+              {/* Звіт */}
+              <label
+                className={`flex items-start gap-3 rounded-xl border border-[#222736] bg-[#0E1118] p-4 ${
+                  isProgramming ? "cursor-pointer" : "cursor-not-allowed opacity-50"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={isProgramming && generateReport}
+                  disabled={!isProgramming}
+                  onChange={(e) => setGenerateReport(e.target.checked)}
+                  className="mt-1 accent-violet-500"
+                />
+            
+                <span>
+                  <span className="block text-sm font-medium text-gray-200">
+                    Створити звіт
                   </span>
-                </label>
-                        
-                <label className="flex items-start gap-3 rounded-xl border border-[#222736] bg-[#0E1118] p-4 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={generateArchive}
-                    onChange={(e) => setGenerateArchive(e.target.checked)}
-                    className="mt-1 accent-violet-500"
-                  />
-                  <span>
-                    <span className="block text-sm font-medium text-gray-200">
-                      Створити папку з файлами
-                    </span>
-                    <span className="block text-xs text-gray-400 mt-1">
-                      Результати виконання будуть зібрані в окремій папці.
-                    </span>
+                  <span className="block text-xs text-gray-400 mt-1">
+                    {isProgramming
+                      ? "Агент сформує звіт про виконання завдання."
+                      : "Доступно тільки для предмету «Програмування»."}
                   </span>
-                </label>
-              </div>
-            )}
+                </span>
+              </label>
+                    
+              {/* Файли */}
+              <label
+                className={`flex items-start gap-3 rounded-xl border border-[#222736] bg-[#0E1118] p-4 ${
+                  isProgramming ? "cursor-pointer" : "cursor-not-allowed opacity-50"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={isProgramming && generateArchive}
+                  disabled={!isProgramming}
+                  onChange={(e) => setGenerateArchive(e.target.checked)}
+                  className="mt-1 accent-violet-500"
+                />
+            
+                <span>
+                  <span className="block text-sm font-medium text-gray-200">
+                    Створити папку з файлами
+                  </span>
+                  <span className="block text-xs text-gray-400 mt-1">
+                    {isProgramming
+                      ? "Результати виконання будуть зібрані в окремій папці."
+                      : "Доступно тільки для предмету «Програмування»."}
+                  </span>
+                </span>
+              </label>
+            </div>
           </section>
 
           {/* SECTION 4 — SUBMISSION SUMMARY & START */}

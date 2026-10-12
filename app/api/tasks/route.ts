@@ -89,19 +89,17 @@ export async function POST(request: Request) {
       );
     }
 
-    const isProgramming = subject.trim() === "Програмування";
-    const isDatabases = subject.trim() === "Бази даних";
+    const normalizedSubject = subject.trim();
 
-    const generateReport =
-      isProgramming && outputOptions?.generateReport === true;
-
-    const generateArchive =
-      isProgramming && outputOptions?.generateArchive === true;
+    const isProgramming = normalizedSubject === "Програмування";
+    const isDatabases = normalizedSubject === "Бази даних";
 
     const effectiveOutputOptions = {
       separateBranch: !isDatabases,
-      generateReport,
-      generateArchive,
+      generateReport:
+        isProgramming && outputOptions?.generateReport === true,
+      generateArchive:
+        isProgramming && outputOptions?.generateArchive === true,
     };
 
     const effectiveSubject =
@@ -249,8 +247,8 @@ export async function POST(request: Request) {
           tasksFolder: `task-${task.id}`,
           commitMessage: task.commitMessage!,
           installationToken,
-          generateReport,
-          generateArchive,
+          generateReport: effectiveOutputOptions.generateReport,
+          generateArchive: effectiveOutputOptions.generateArchive,
 
           onStage: async (stageId) => {
             const stageIndex = TASK_STAGE_DEFINITIONS.findIndex(

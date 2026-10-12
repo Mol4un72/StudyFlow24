@@ -59,15 +59,26 @@ export async function GET(request: NextRequest) {
   const clientId = process.env.GITHUB_CLIENT_ID;
   const clientSecret = process.env.GITHUB_CLIENT_SECRET;
   const appId = Number(process.env.GITHUB_APP_ID);
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
 
   if (
     !clientId ||
     !clientSecret ||
+    !appUrl ||
     !Number.isSafeInteger(appId) ||
     appId <= 0
   ) {
     return NextResponse.json(
-      { error: "GitHub OAuth або App не налаштований" },
+      { error: "GitHub OAuth, App або URL застосунку не налаштований" },
+      { status: 500 }
+    );
+  }
+
+  try {
+    new URL(appUrl);
+  } catch {
+    return NextResponse.json(
+      { error: "Некоректний NEXT_PUBLIC_APP_URL" },
       { status: 500 }
     );
   }
@@ -210,7 +221,7 @@ export async function GET(request: NextRequest) {
 
     // 6. Повертаємо користувача в налаштування StudyFlow
     const response = NextResponse.redirect(
-      new URL("/settings?github=connected", request.url)
+      new URL("/settings?github=connected", appUrl)
     );
 
     response.cookies.set("github_oauth_state", "", {

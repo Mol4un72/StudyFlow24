@@ -67,6 +67,14 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
             } disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
             {...props}
           >
+            <option
+              value=""
+              disabled
+              className="bg-[#12151D] text-gray-400"
+            >
+              Оберіть дисципліну
+            </option>
+          
             {formattedOptions.map((opt) => (
               <option
                 key={opt.value}
