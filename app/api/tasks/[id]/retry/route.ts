@@ -102,8 +102,12 @@ export async function POST(
     );
 
     // Створюємо нову гілку для повторної спроби.
-    const branchName =
-      `retry-${originalTask.id}-${Date.now().toString(36)}`;
+    const normalizedSubject = originalTask.subject.trim().toLowerCase();
+    const isDatabases = normalizedSubject === "бази даних";
+
+    const branchName = isDatabases
+      ? originalTask.branchName
+      : `retry-${originalTask.id}-${Date.now().toString(36)}`;
 
     // Створюємо окреме завдання, пов'язане з початковим.
     const retryTask = await prisma.task.create({
@@ -152,7 +156,6 @@ export async function POST(
         generateArchive?: boolean;
       } | null;
     
-    const normalizedSubject = originalTask.subject.trim().toLowerCase();
     const allowExtraFiles = normalizedSubject === "програмування";
 
     // Запускаємо агента асинхронно, не затримуючи HTTP-відповідь.
@@ -172,7 +175,7 @@ export async function POST(
             `https://github.com/${retryTask.repositoryFullName}`,
 
           branch: retryTask.branchName!,
-          branchMode: "named",
+          branchMode: isDatabases ? "current" : "named",
           generateReport:
             allowExtraFiles && outputOptions?.generateReport === true,
           generateArchive:
