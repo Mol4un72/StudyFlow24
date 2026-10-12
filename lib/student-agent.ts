@@ -16,7 +16,7 @@ interface RunAgentOptions {
 
 export async function runStudentAgent(
   options: RunAgentOptions,
-): Promise<void> {
+): Promise<string | null> {
   const agentPath = process.env.STUDENT_AGENT_PATH;
   const pythonPath = process.env.STUDENT_AGENT_PYTHON;
 
@@ -39,6 +39,8 @@ export async function runStudentAgent(
     "--commit-message",
     options.commitMessage,
   ];
+
+  let pushedCommitSha: string | null = null;
 
   await new Promise<void>((resolve, reject) => {
     const child = spawn(pythonPath, args, {
@@ -78,6 +80,17 @@ export async function runStudentAgent(
     let stageUpdateQueue: Promise<void> = Promise.resolve();
 
     const processLine = (line: string) => {
+      const pushedPrefix = "STUDYFLOW_PUSHED:";
+      if (line.startsWith(pushedPrefix)) {
+        const sha = line.slice(pushedPrefix.length).trim();
+        if (!/^[a-f0-9]{40}$/i.test(sha)) {
+          console.error("Student agent emitted an invalid commit SHA.");
+          return;
+        }
+        pushedCommitSha = sha;
+        return;
+      }
+
       const prefix = "STUDYFLOW_STAGE:";
 
       if (!line.startsWith(prefix)) return;
@@ -185,4 +198,6 @@ export async function runStudentAgent(
       );
     });
   });
+
+  return pushedCommitSha;
 }

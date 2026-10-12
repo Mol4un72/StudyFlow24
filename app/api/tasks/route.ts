@@ -232,7 +232,7 @@ export async function POST(request: Request) {
 
     void (async () => {
       try {
-        await runStudentAgent({
+        const pushedCommitSha = await runStudentAgent({
           assignment: [
             `ОСНОВНЕ ЗАВДАННЯ:\n${task.assignmentText}`,
             task.additionalContext?.trim()
@@ -270,41 +270,6 @@ export async function POST(request: Request) {
                     : "pending",
             }));
 
-            try {
-              const response = await fetch(
-                `https://api.github.com/repos/${task.repositoryFullName}/branches/${encodeURIComponent(task.branchName!)}`,
-                {
-                  headers: {
-                    Authorization: `Bearer ${installationToken}`,
-                    Accept: "application/vnd.github+json",
-                    "X-GitHub-Api-Version": "2022-11-28",
-                  },
-                  cache: "no-store",
-                },
-              );
-
-              if (!response.ok) {
-                throw new Error(
-                  `GitHub API error: ${response.status} ${response.statusText}`,
-                );
-              }
-
-              const branchData = await response.json();
-              const commitSha = branchData.commit?.sha;
-
-              if (typeof commitSha === "string") {
-                await prisma.task.update({
-                  where: { id: task.id },
-                  data: { commitSha },
-                });
-              }
-            } catch (error) {
-              console.error(
-                `Could not save commit SHA for task ${task.id}:`,
-                error,
-              );
-            }
-
             await prisma.task.update({
               where: { id: task.id },
               data: {
@@ -319,6 +284,13 @@ export async function POST(request: Request) {
             );
           },
         });
+
+        if (pushedCommitSha) {
+          await prisma.task.update({
+            where: { id: task.id },
+            data: { commitSha: pushedCommitSha },
+          });
+        }
 
         const latestTask = await prisma.task.findUnique({
           where: { id: task.id },
