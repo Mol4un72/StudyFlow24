@@ -134,10 +134,13 @@ export async function POST(
     });
 
     const outputOptions =
-    originalTask.outputOptions as {
-      generateReport?: boolean;
-      generateArchive?: boolean;
-    } | null;
+      originalTask.outputOptions as {
+        generateReport?: boolean;
+        generateArchive?: boolean;
+      } | null;
+    
+    const normalizedSubject = originalTask.subject.trim().toLowerCase();
+    const allowExtraFiles = normalizedSubject === "програмування";
 
     // Запускаємо агента асинхронно, не затримуючи HTTP-відповідь.
     void (async () => {
@@ -157,8 +160,10 @@ export async function POST(
 
           branch: retryTask.branchName!,
           branchMode: "named",
-          generateReport: outputOptions?.generateReport === true,
-          generateArchive: outputOptions?.generateArchive === true,
+          generateReport:
+            allowExtraFiles && outputOptions?.generateReport === true,
+          generateArchive:
+            allowExtraFiles && outputOptions?.generateArchive === true,
           tasksFolder: `task-${retryTask.id}`,
           commitMessage: retryTask.commitMessage!,
           installationToken,
