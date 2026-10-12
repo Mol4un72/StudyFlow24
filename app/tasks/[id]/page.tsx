@@ -4,7 +4,6 @@ import React, { useState, useEffect, useCallback, use } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { mockArtifactService } from "@/services/mockArtifactService";
 import { Assignment } from "@/types/assignment";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/Button";
@@ -15,14 +14,11 @@ import {
   GitBranch,
   GitCommit,
   FolderGit2,
-  Download,
-  Archive,
-  FileText,
-  CheckCircle2,
   Loader2,
   Plus,
   ArrowLeft,
   FileCode,
+  CheckCircle2,
 } from "lucide-react";
 
 export default function TaskViewPage({
@@ -37,8 +33,6 @@ export default function TaskViewPage({
 
   const [assignment, setAssignment] = useState<Assignment | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [downloadingZip, setDownloadingZip] = useState(false);
-  const [downloadingReport, setDownloadingReport] = useState(false);
 
   const loadAssignment = useCallback(
     async (showLoader = false) => {
@@ -87,8 +81,8 @@ export default function TaskViewPage({
             : [],
           outputOptions: task.outputOptions ?? {
             separateBranch: true,
-            generateReport: true,
-            generateArchive: true,
+            generateReport: false,
+          generateArchive: false,
           },
           reportStatus: task.reportStatus,
           archiveStatus: task.archiveStatus,
@@ -133,48 +127,6 @@ export default function TaskViewPage({
       window.clearInterval(intervalId);
     };
   }, [assignment?.status, assignment, loadAssignment]);
-
-  const handleDownloadZip = async () => {
-    if (!assignment) return;
-
-    setDownloadingZip(true);
-
-    try {
-      const ok =
-        await mockArtifactService.generateAndDownloadZip(assignment);
-
-      if (ok) {
-        showToast({
-          type: "success",
-          title: "ZIP-архів завантажено",
-          message: "Папку з файлами розв'язку збережено.",
-        });
-      }
-    } finally {
-      setDownloadingZip(false);
-    }
-  };
-
-  const handleDownloadReport = async () => {
-    if (!assignment) return;
-
-    setDownloadingReport(true);
-
-    try {
-      const ok =
-        await mockArtifactService.generateAndDownloadReport(assignment);
-
-      if (ok) {
-        showToast({
-          type: "success",
-          title: "Звіт завантажено",
-          message: "DOCX звіт завантажено. Додайте скриншоти перед здачею.",
-        });
-      }
-    } finally {
-      setDownloadingReport(false);
-    }
-  };
 
   if (isLoading) {
     return (
@@ -443,86 +395,6 @@ export default function TaskViewPage({
 
         {assignment.status === "completed" && (
           <div className="space-y-6 animate-in fade-in duration-200">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-6 rounded-2xl bg-[#12151D] border border-[#222736] hover:border-[#2E3547] transition-all flex flex-col justify-between gap-5 shadow-lg">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="w-10 h-10 rounded-xl bg-[#191D28] border border-[#2E3547] text-[#8B5CF6] flex items-center justify-center">
-                      <Archive className="w-5 h-5" />
-                    </div>
-
-                    <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-950/60 text-emerald-400 border border-emerald-800/40">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      Готово
-                    </span>
-                  </div>
-
-                  <div>
-                    <h3 className="text-base font-bold text-white">
-                      Папка з виконаними завданнями
-                    </h3>
-
-                    <p className="text-xs text-gray-400 mt-1 leading-relaxed">
-                      ZIP-архів з усіма файлами розв'язку, структурою каталогів
-                      та README.
-                    </p>
-                  </div>
-                </div>
-
-                <div>
-                  <Button
-                    variant="primary"
-                    size="md"
-                    className="w-full"
-                    onClick={handleDownloadZip}
-                    isLoading={downloadingZip}
-                    leftIcon={<Download className="w-4 h-4" />}
-                  >
-                    Завантажити архів (.ZIP)
-                  </Button>
-                </div>
-              </div>
-
-              <div className="p-6 rounded-2xl bg-[#12151D] border border-[#222736] hover:border-[#2E3547] transition-all flex flex-col justify-between gap-5 shadow-lg">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="w-10 h-10 rounded-xl bg-[#191D28] border border-[#2E3547] text-indigo-400 flex items-center justify-center">
-                      <FileText className="w-5 h-5" />
-                    </div>
-
-                    <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-950/60 text-emerald-400 border border-emerald-800/40">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      Сформовано
-                    </span>
-                  </div>
-
-                  <div>
-                    <h3 className="text-base font-bold text-white">
-                      Окремий файл зі звітом
-                    </h3>
-
-                    <p className="text-xs text-gray-400 mt-1 leading-relaxed">
-                      Готовий лабораторний звіт (DOCX). Завантажте, додайте
-                      власні скриншоти та надішліть викладачу.
-                    </p>
-                  </div>
-                </div>
-
-                <div>
-                  <Button
-                    variant="secondary"
-                    size="md"
-                    className="w-full"
-                    onClick={handleDownloadReport}
-                    isLoading={downloadingReport}
-                    leftIcon={<Download className="w-4 h-4" />}
-                  >
-                    Завантажити звіт (.DOCX)
-                  </Button>
-                </div>
-              </div>
-            </div>
-
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-semibold text-gray-300 uppercase tracking-wider flex items-center gap-2">

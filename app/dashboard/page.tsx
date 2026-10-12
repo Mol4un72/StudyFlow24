@@ -62,8 +62,8 @@ export default function DashboardPage() {
           : [],
         outputOptions: task.outputOptions ?? {
           separateBranch: true,
-          generateReport: true,
-          generateArchive: true,
+          generateReport: false,
+          generateArchive: false,
         },
         reportStatus: task.reportStatus,
         archiveStatus: task.archiveStatus,
